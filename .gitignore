@@ -1,0 +1,17 @@
+# Arquivos de cache e do sistema
+__pycache__/
+*.pyc
+.DS_Store
+
+# Diretórios de dados e modelos
+/data/
+/models/
+/results/
+
+# Notebooks
+.ipynb_checkpoints
+
+# Ambientes virtuais
+.venv/
+venv/
+
