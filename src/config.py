@@ -1,4 +1,3 @@
-# src/config.py
 from pathlib import Path
 
 # --- ESTRUTURA DE DIRETÓRIOS ---
@@ -12,7 +11,7 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 MODELS_DIR = BASE_DIR / "models"
 RESULTS_DIR = BASE_DIR / "results"
-EMBED_DIR = BASE_DIR / "embeddings"
+EMBED_DIR = DATA_DIR / "embeddings"
 
 # --- NOMES DOS ARQUIVOS DE DADOS ---
 # Arquivos brutos
