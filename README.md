@@ -1,19 +1,34 @@
-# **Affinity2Vec (Transformer \+ GNN): Predição de Afinidade Droga-Alvo**
+# **Affinity2Vec (Transformer \+ GNN): Predição de Afinidade Droga-Alvo End-to-End**
 
-Este projeto implementa uma pipeline avançada de aprendizado de máquina para prever a afinidade de ligação (binding affinity) entre drogas (compostos químicos) e alvos (proteínas). A abordagem combina o poder dos **Transformers** para entender as sequências moleculares, **Graph Neural Networks (GNNs)** para capturar a topologia da rede de interações, e o **XGBoost** como um regressor final robusto.  
-O objetivo é superar as limitações de modelos que analisam drogas e proteínas isoladamente, criando representações (embeddings) que são enriquecidas tanto pelo contexto da sequência quanto pela vizinhança no grafo de interações e similaridades.
+Este projeto implementa uma pipeline de aprendizado de máquina para prever a afinidade de ligação (binding affinity) entre drogas e alvos proteicos. A abordagem utiliza uma **Graph Neural Network (GNN) End-to-End**, que aprende a partir de características moleculares geradas por **Transformers** e da topologia de um grafo de interações complexas.  
+O objetivo é criar um modelo único e otimizado que não apenas aprende representações (embeddings) enriquecidas pelo contexto do grafo, mas também realiza a predição final da afinidade, superando as limitações de modelos que analisam as entidades de forma isolada ou em múltiplas etapas não otimizadas.
 
 ## **Metodologia**
 
-A pipeline é dividida em três estágios principais:
+A pipeline é dividida em dois estágios principais:
 
-1. **Geração de Embeddings de Sequência com Transformers:** Utilizamos modelos Transformer pré-treinados de última geração, como ChemBERTa para as drogas (a partir de SMILES) e ProtBERT para as proteínas (a partir de sequências de aminoácidos), para gerar embeddings de alta qualidade que capturam as propriedades bioquímicas intrínsecas de cada entidade.  
-2. **Enriquecimento de Embeddings com GNNs:** Os embeddings gerados pelos Transformers são usados como características iniciais para os nós de um grafo heterogêneo. Este grafo modela as complexas relações do sistema, incluindo:  
-   * Similaridade Droga-Droga  
-   * Similaridade Proteína-Proteína  
-   * Interações conhecidas Droga-Proteína  
-     Uma GNN (como a Heterogeneous Graph Attention Network \- HAN) é então treinada sobre este grafo para refinar os embeddings, propagando informações através da rede e criando representações finais que são "conscientes" do contexto global.  
-3. **Predição Final com XGBoost:** Os embeddings finais e enriquecidos para cada par droga-proteína são concatenados e utilizados para treinar um modelo XGBoost. Este modelo de Gradient Boosting é altamente eficaz para capturar relações não-lineares complexas nos dados e realizar a predição final do valor de afinidade.
+1. **Geração de Embeddings Iniciais com Transformers:** Utilizamos modelos Transformer pré-treinados, como ChemBERTa (para SMILES de drogas) e ProtBERT/ESM (para sequências de aminoácidos de proteínas), para gerar embeddings de alta qualidade. Estes embeddings servem como as características iniciais dos nós no nosso grafo, capturando as propriedades bioquímicas intrínsecas de cada entidade.  
+2. **Treinamento e Predição com GNN End-to-End:** Os embeddings iniciais são usados como features de nós em um grafo heterogêneo, que é então treinado diretamente para a tarefa de regressão.
+
+### **Estrutura do Grafo Heterogêneo**
+
+O coração do modelo é um grafo heterogêneo que captura diferentes tipos de entidades e relações:
+
+* **Nós (Nodes):**  
+  * drug: Representa cada composto químico único no conjunto de dados.  
+  * protein: Representa cada alvo proteico único.  
+* **Arestas (Edges):** As relações entre os nós são modeladas por diferentes tipos de arestas, permitindo que a GNN aprenda com múltiplos contextos:  
+  * ('drug', 'interacts\_with', 'protein'): A aresta principal do problema. Conecta uma droga a uma proteína com base em um valor de afinidade conhecido. É esta relação que o modelo aprende a prever.  
+  * ('drug', 'similar\_to', 'drug'): Conecta duas drogas que são estruturalmente similares ( alta similaridade de Tanimoto baseada nos seus SMILES).  
+  * ('protein', 'similar\_to', 'protein'): Conecta duas proteínas que são estruturalmente similares (alta similaridade de alinhamento de sequência como Smith-Waterman).  
+  * ('drug', 'semantic\_similar\_to', 'drug'): Conecta duas drogas que são semanticamente próximas no espaço de embedding inicial (alta similaridade de cosseno).  
+  * ('protein', 'semantic\_similar\_to', 'protein'): Conecta duas proteínas que são semanticamente próximas no espaço de embedding inicial.
+
+### **Fluxo de Aprendizagem na GNN**
+
+* **Message Passing:** As camadas da GNN (ex: GATConv) propagam e agregam informações através de todos os tipos de arestas, refinando os embeddings dos nós para que eles se tornem "conscientes" do seu contexto global no grafo.  
+* **Predição Direta:** Uma "cabeça" de regressão (um MLP decoder) é integrada ao final da arquitetura da GNN. Ela pega os embeddings finais e enriquecidos de um par droga-proteína e prevê diretamente o valor de afinidade.  
+* **Otimização de Ponta a Ponta:** O erro da predição final é retropropagado através de toda a rede, ajustando tanto os pesos do decoder quanto os das camadas da GNN. Isto garante que os embeddings sejam otimizados especificamente para a tarefa de prever a afinidade.
 
 ## **Estrutura do Projeto**
 
@@ -21,23 +36,18 @@ O projeto é organizado na seguinte estrutura de diretórios para garantir modul
 affinity2vec\_project/  
 ├── data/  
 │   ├── raw/         \# Dados originais e intocados  
-│   └── processed/   \# Dados limpos e prontos para uso (treino/teste)  
+│   └── processed/   \# Grafos processados e prontos para uso (train/val/test)  
 │  
-├── models/          \# Modelos treinados e outros artefatos (scaler, etc.)  
-│  
-├── notebooks/       \# Notebooks para exploração e prototipagem  
+├── models/          \# Modelos GNN treinados (.pt)  
 │  
 ├── results/         \# Gráficos, métricas e predições finais  
 │  
 ├── src/             \# Código-fonte principal da pipeline  
 │   ├── config.py    \# Arquivo central de configurações e hiperparâmetros  
-│   ├── data\_loader.py \# Scripts para carregar e processar dados  
-│   ├── dataset.py   \# Definição de Datasets PyTorch e do grafo HeteroData  
-│   ├── model.py     \# Arquitetura do modelo GNN  
-│   ├── utils.py     \# Funções auxiliares e métricas de avaliação  
-│   ├── train\_gnn.py \# Script para treinar o modelo GNN  
-│   ├── generate\_embeddings.py \# Script para gerar embeddings com a GNN treinada  
-│   └── train\_xgboost.py \# Script para treinar o regressor XGBoost final  
+│   ├── dataset.py   \# Script para construir e salvar os grafos (train/val/test)  
+│   ├── model.py     \# Arquitetura do modelo HeteroGNN  
+│   ├── train.py     \# Script para treinar o modelo GNN  
+│   └── evaluate.py  \# Script para avaliar o modelo GNN treinado  
 │  
 ├── .gitignore       \# Arquivos e diretórios a serem ignorados pelo Git  
 ├── README.md        \# Este arquivo  
@@ -58,31 +68,26 @@ affinity2vec\_project/
 
 ## **Como Executar a Pipeline**
 
-A pipeline foi projetada para ser executada em uma sequência de passos claros e independentes.
+A pipeline foi projetada para ser executada em uma sequência de três passos claros.
 
 ### **Passo 0: Configuração**
 
 Antes de executar, verifique o arquivo src/config.py. Ele contém todos os caminhos, nomes de arquivos e hiperparâmetros importantes. Ajuste-o conforme necessário para o seu ambiente.
 
-### **Passo 1: Preparação dos Dados**
+### **Passo 1: Construção dos Grafos**
 
-Execute o script de carregamento para processar os dados brutos e criar os conjuntos de treino e teste.  
-python src/data\_loader.py
+Execute este script **uma vez** para processar os dados de interação e criar os ficheiros de grafo para treino, validação e teste.  
+python src/dataset.py
 
 ### **Passo 2: Treinamento do Modelo GNN**
 
-Este script treina a Graph Neural Network usando os embeddings do Transformer como features iniciais e salva o modelo treinado em models/.  
-python src/train\_gnn.py
+Este script carrega os grafos de treino e validação, treina o modelo HeteroGNN e salva a melhor versão (com base no desempenho de validação) na pasta models/.  
+python src/train.py
 
-### **Passo 3: Geração dos Embeddings Finais**
+### **Passo 3: Avaliação Final do Modelo**
 
-Com a GNN treinada, gere os embeddings finais (enriquecidos pelo grafo) para todos os dados.  
-python src/generate\_embeddings.py
-
-### **Passo 4: Treinamento do Regressor XGBoost**
-
-Finalmente, treine o modelo XGBoost usando os embeddings gerados no passo anterior. Este script também avaliará o modelo e salvará as métricas e gráficos em results/.  
-python src/train\_xgboost.py
+Finalmente, execute este script para carregar o melhor modelo salvo e avaliá-lo no conjunto de teste. Ele salvará as métricas de desempenho e um gráfico de predição na pasta results/.  
+python src/evaluate.py
 
 ## **Configuração**
 
